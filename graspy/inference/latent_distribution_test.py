@@ -114,7 +114,7 @@ class LatentDistributionTest(BaseInference):
         pass_graph=True,
         alignment="sign_flips",
         size_correction=None,
-        n_samples=1
+        n_samples=1,
     ):
         if n_components is not None:
             if not isinstance(n_components, int):
@@ -270,7 +270,7 @@ class LatentDistributionTest(BaseInference):
     #     return X_sigmas, Y_sigmas
 
     def _estimate_correction_variances(self, X_hat, Y_hat, pooled=True):
-        N, d_X = X_hat.shape # dont really need to do this (n_components)
+        N, d_X = X_hat.shape  # dont really need to do this (n_components)
         M, d_Y = Y_hat.shape
         if N == M:
             X_sigmas = np.zeros((N, d_X, d_X))
@@ -424,8 +424,7 @@ class LatentDistributionTest(BaseInference):
             kernel_matrix = np.mean(kernel_matrices, axis=0)
         elif self.expected:
             X_sigmas, Y_sigmas = self._estimate_correction_variances(X_hat, Y_hat)
-            kernel_matrix = self._rbfk_matrix_expected(X_hat, Y_hat,
-                                                       X_sigmas, Y_sigmas)
+            kernel_matrix = self._rbfk_matrix_expected(X_hat, Y_hat, X_sigmas, Y_sigmas)
         else:
             self._rbfk_matrix = self._rbfk_matrix_regular
             kernel_matrix = self._rbfk_matrix_regular(X_hat, Y_hat)

@@ -69,7 +69,7 @@ class TestLatentDistributionTest(unittest.TestCase):
         p_unmodified = ldt_unmodified.fit(A, B)
         self.assertTrue(p_unmodified < 0.05)
 
-        ldt_sampling = LatentDistributionTest(size_correction='sampling')
+        ldt_sampling = LatentDistributionTest(size_correction="sampling")
         p_sampling = ldt_sampling.fit(A, B)
         self.assertTrue(p_modified > 0.05)
 
