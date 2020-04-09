@@ -22,16 +22,22 @@ class TestLatentDistributionTest(unittest.TestCase):
         p = npt.fit(self.A1, self.A2)
 
     def test_bad_kwargs(self):
+        with self.assertRaises(TypeError):
+            LatentDistributionTest(n_components=0.5)
         with self.assertRaises(ValueError):
             LatentDistributionTest(n_components=-100)
+        with self.assertRaises(TypeError):
+            LatentDistributionTest(n_bootstraps=0.5)
         with self.assertRaises(ValueError):
             LatentDistributionTest(n_bootstraps=-100)
         with self.assertRaises(TypeError):
-            LatentDistributionTest(n_bootstraps=0.5)
-        with self.assertRaises(TypeError):
-            LatentDistributionTest(n_components=0.5)
-        with self.assertRaises(TypeError):
             LatentDistributionTest(bandwidth="oops")
+        with self.assertRaises(TypeError):
+            LatentDistributionTest(pass_graph="oops")
+        with self.assertRaises(NotImplementedError):
+            LatentDistributionTest(alignment="oops")
+        with self.assertRaises(NotImplementedError):
+            LatentDistributionTest(size_correction="oops")
 
     def test_n_bootstraps(self):
         npt = LatentDistributionTest(n_bootstraps=234, n_components=None)
@@ -53,6 +59,19 @@ class TestLatentDistributionTest(unittest.TestCase):
         npt = LatentDistributionTest()
         p = npt.fit(A, B)
         self.assertTrue(p > 0.05)
+
+    def test_different_sizes(self):
+        np.random.seed(314)
+        A = er_np(50, 0.8)
+        B = er_np(5000, 0.8)
+
+        ldt_unmodified = LatentDistributionTest(size_correction=None)
+        p_unmodified = ldt_unmodified.fit(A, B)
+        self.assertTrue(p_unmodified < 0.05)
+
+        ldt_sampling = LatentDistributionTest(size_correction='sampling')
+        p_sampling = ldt_sampling.fit(A, B)
+        self.assertTrue(p_modified > 0.05)
 
     def test_SBM_epsilon(self):
         np.random.seed(12345678)

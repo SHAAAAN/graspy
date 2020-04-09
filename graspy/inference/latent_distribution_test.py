@@ -114,6 +114,7 @@ class LatentDistributionTest(BaseInference):
         pass_graph=True,
         alignment="sign_flips",
         size_correction=None,
+        n_samples=1
     ):
         if n_components is not None:
             if not isinstance(n_components, int):
@@ -129,6 +130,10 @@ class LatentDistributionTest(BaseInference):
 
         if bandwidth is not None and not isinstance(bandwidth, float):
             msg = "bandwidth must an int, not {}".format(type(bandwidth))
+            raise TypeError(msg)
+
+        if not isinstance(pass_graph, bool):
+            msg = "pass_graph must be a bool, not {}".format(type(pass_graph))
             raise TypeError(msg)
 
         if alignment is None:
@@ -157,6 +162,13 @@ class LatentDistributionTest(BaseInference):
                 )
                 raise NotImplementedError(msg)
 
+        if not isinstance(n_samples, int):
+            msg = "n_samples must an int, not {}".format(type(n_samples))
+            raise TypeError(msg)
+        elif n_samples < 1:
+            msg = "{} is invalid number of samples, must be greater than 1"
+            raise ValueError(msg.format(n_samples))
+
         super().__init__(embedding="ase", n_components=n_components)
 
         self.n_bootstraps = n_bootstraps
@@ -166,6 +178,8 @@ class LatentDistributionTest(BaseInference):
         if self.bandwidth is None:
             self.bandwidth = 0.5
         self.pass_graph = pass_graph
+
+        self.alignment = alignment
 
         if size_correction == "sampling":
             self.sampling = True
@@ -177,7 +191,7 @@ class LatentDistributionTest(BaseInference):
             self.sampling = False
             self.expected = False
 
-        self.alignment = alignment
+        self.samples = samples
 
     def _fit_plug_in_variance_estimator(self, X):
         """
@@ -231,43 +245,43 @@ class LatentDistributionTest(BaseInference):
 
         return plug_in_variance_estimator
 
+    # def _estimate_correction_variances(self, X_hat, Y_hat, pooled=True):
+    #     N, d_X = X_hat.shape  # dont really need to do this (n_components)
+    #     M, d_Y = Y_hat.shape
+    #     if N == M:
+    #         X_sigmas = np.zeros((N, d_X, d_X))
+    #         Y_sigmas = np.zeros((M, d_Y, d_Y))
+    #     elif N > M:
+    #         if pooled:
+    #             two_samples = np.concatenate([X_hat, Y_hat], axis=0)
+    #             get_sigma = self._fit_plug_in_variance_estimator(two_samples)
+    #         else:
+    #             get_sigma = self._fit_plug_in_variance_estimator(X_hat)
+    #         X_sigmas = get_sigma(X_hat) * (N - M) / (N * M)
+    #         Y_sigmas = np.zeros((M, d_Y, d_Y))
+    #     else:
+    #         if pooled:
+    #             two_samples = np.concatenate([X_hat, Y_hat], axis=0)
+    #             get_sigma = self._fit_plug_in_variance_estimator(two_samples)
+    #         else:
+    #             get_sigma = self._fit_plug_in_variance_estimator(X_hat)
+    #         X_sigmas = np.zeros((N, d_X, d_X))
+    #         Y_sigmas = get_sigma(Y_hat) * (M - N) / (N * M)
+    #     return X_sigmas, Y_sigmas
+
     def _estimate_correction_variances(self, X_hat, Y_hat, pooled=True):
-        N, d_X = X_hat.shape  # dont really need to do this (n_components)
+        N, d_X = X_hat.shape # dont really need to do this (n_components)
         M, d_Y = Y_hat.shape
         if N == M:
             X_sigmas = np.zeros((N, d_X, d_X))
             Y_sigmas = np.zeros((M, d_Y, d_Y))
         elif N > M:
-            if pooled:
-                two_samples = np.concatenate([X_hat, Y_hat], axis=0)
-                get_sigma = self._fit_plug_in_variance_estimator(two_samples)
-            else:
-                get_sigma = self._fit_plug_in_variance_estimator(X_hat)
-            X_sigmas = get_sigma(X_hat) * (N - M) / (N * M)
+            X_sigmas = np.ones((N, d_Y, d_Y)) * (N - M) / (N * M)
             Y_sigmas = np.zeros((M, d_Y, d_Y))
         else:
-            if pooled:
-                two_samples = np.concatenate([X_hat, Y_hat], axis=0)
-                get_sigma = self._fit_plug_in_variance_estimator(two_samples)
-            else:
-                get_sigma = self._fit_plug_in_variance_estimator(X_hat)
             X_sigmas = np.zeros((N, d_X, d_X))
-            Y_sigmas = get_sigma(Y_hat) * (M - N) / (N * M)
+            Y_sigmas = np.ones((M, d_Y, d_Y)) * (M - N) / (N * M)
         return X_sigmas, Y_sigmas
-
-    #     def _estimate_correction_variances(self, X_hat, Y_hat, pooled=True):
-    #         N, d_X = X_hat.shape # dont really need to do this (n_components)
-    #         M, d_Y = Y_hat.shape
-    #         if N == M:
-    #             X_sigmas = np.zeros((N, d_X, d_X))
-    #             Y_sigmas = np.zeros((M, d_Y, d_Y))
-    #         elif N > M:
-    #             X_sigmas = np.ones((N, d_Y, d_Y)) * (N - M) / (N * M)
-    #             Y_sigmas = np.zeros((M, d_Y, d_Y))
-    #         else:
-    #             X_sigmas = np.zeros((N, d_X, d_X))
-    #             Y_sigmas = np.ones((M, d_Y, d_Y)) * (M - N) / (N * M)
-    #         return X_sigmas, Y_sigmas
 
     def _sample_modified_ase(self, X, Y):
         n = len(X)
@@ -402,23 +416,20 @@ class LatentDistributionTest(BaseInference):
             Q = aligner.fit_predict(X_hat, Y_hat)
             Y_hat = Y_hat @ Q
 
-        # todo clean up the following block of beej-code
-        # obtain modified ase
         if self.sampling:
-            X_hat, Y_hat = self._sample_modified_ase(X_hat, Y_hat)
-
-        if self.expected:
-            # estimate the variances using the plug-in estimator from the clt
-            # it is much faster to precompute the variances
+            kernel_matrices = []
+            for i in range(samples):
+                X_hat, Y_hat = self._sample_modified_ase(X_hat, Y_hat)
+                kernel_matrices.append(self._rbfk_matrix_regular(X_hat, Y_hat))
+            kernel_matrix = np.mean(kernel_matrices, axis=0)
+        elif self.expected:
             X_sigmas, Y_sigmas = self._estimate_correction_variances(X_hat, Y_hat)
-            self._rbfk_matrix = self._rbfk_matrix_expected
+            kernel_matrix = self._rbfk_matrix_expected(X_hat, Y_hat,
+                                                       X_sigmas, Y_sigmas)
         else:
-            X_sigmas = np.zeros(X_hat.shape)  # never used
-            Y_sigmas = np.zeros(Y_hat.shape)  # never used
             self._rbfk_matrix = self._rbfk_matrix_regular
+            kernel_matrix = self._rbfk_matrix_regular(X_hat, Y_hat)
 
-        # compute the test statistic and the null distribution
-        kernel_matrix = self._kernel_matrix(X_hat, Y_hat, X_sigmas, Y_sigmas)
         U = self._statistic(kernel_matrix, len(X_hat), len(Y_hat))
         self.null_distribution_ = self._bootstrap(
             kernel_matrix, len(X_hat), len(Y_hat), self.n_bootstraps
