@@ -165,7 +165,7 @@ class LatentDistributionTest(BaseInference):
         if not isinstance(n_samples, int):
             msg = "n_samples must an int, not {}".format(type(n_samples))
             raise TypeError(msg)
-        elif n_samples < 1:
+        elif n_samples < 0:
             msg = "{} is invalid number of samples, must be greater than 1"
             raise ValueError(msg.format(n_samples))
 
@@ -191,7 +191,7 @@ class LatentDistributionTest(BaseInference):
             self.sampling = False
             self.expected = False
 
-        self.samples = samples
+        self.samples = n_samples
 
     def _fit_plug_in_variance_estimator(self, X):
         """
@@ -417,18 +417,25 @@ class LatentDistributionTest(BaseInference):
             Y_hat = Y_hat @ Q
 
         if self.sampling:
-            kernel_matrices = []
-            for i in range(samples):
-                X_hat, Y_hat = self._sample_modified_ase(X_hat, Y_hat)
-                kernel_matrices.append(self._rbfk_matrix_regular(X_hat, Y_hat))
-            kernel_matrix = np.mean(kernel_matrices, axis=0)
+            if self.samples == 0:
+                self._rbfk_matrix = self._rbfk_matrix_regular
+                kernel_matrix = self._kernel_matrix(X_hat, Y_hat, 0 , 0)
+            else:
+                self._rbfk_matrix = self._rbfk_matrix_regular
+                kernel_matrices = []
+                for i in range(self.samples):
+                    X_hat_temp, Y_hat_temp = self._sample_modified_ase(X_hat, Y_hat)
+                    kernel_matrices.append(self._kernel_matrix(X_hat_temp, Y_hat_temp, 0 , 0))
+                kernel_matrix = np.mean(kernel_matrices, axis=0)
         elif self.expected:
             X_sigmas, Y_sigmas = self._estimate_correction_variances(X_hat, Y_hat)
-            kernel_matrix = self._rbfk_matrix_expected(X_hat, Y_hat, X_sigmas, Y_sigmas)
+            self._rbfk_matrix = self._rbfk_matrix_expected
+            kernel_matrix = self._kernel_matrix(X_hat, Y_hat, X_sigmas, Y_sigmas)
         else:
             self._rbfk_matrix = self._rbfk_matrix_regular
-            kernel_matrix = self._rbfk_matrix_regular(X_hat, Y_hat)
+            kernel_matrix = self._kernel_matrix(X_hat, Y_hat, 0 , 0)
 
+        self.kernel_matrix_ = kernel_matrix
         U = self._statistic(kernel_matrix, len(X_hat), len(Y_hat))
         self.null_distribution_ = self._bootstrap(
             kernel_matrix, len(X_hat), len(Y_hat), self.n_bootstraps
