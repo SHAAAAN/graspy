@@ -419,13 +419,15 @@ class LatentDistributionTest(BaseInference):
         if self.sampling:
             if self.samples == 0:
                 self._rbfk_matrix = self._rbfk_matrix_regular
-                kernel_matrix = self._kernel_matrix(X_hat, Y_hat, 0 , 0)
+                kernel_matrix = self._kernel_matrix(X_hat, Y_hat, 0, 0)
             else:
                 self._rbfk_matrix = self._rbfk_matrix_regular
                 kernel_matrices = []
                 for i in range(self.samples):
                     X_hat_temp, Y_hat_temp = self._sample_modified_ase(X_hat, Y_hat)
-                    kernel_matrices.append(self._kernel_matrix(X_hat_temp, Y_hat_temp, 0 , 0))
+                    kernel_matrices.append(
+                        self._kernel_matrix(X_hat_temp, Y_hat_temp, 0, 0)
+                    )
                 kernel_matrix = np.mean(kernel_matrices, axis=0)
         elif self.expected:
             X_sigmas, Y_sigmas = self._estimate_correction_variances(X_hat, Y_hat)
@@ -433,7 +435,7 @@ class LatentDistributionTest(BaseInference):
             kernel_matrix = self._kernel_matrix(X_hat, Y_hat, X_sigmas, Y_sigmas)
         else:
             self._rbfk_matrix = self._rbfk_matrix_regular
-            kernel_matrix = self._kernel_matrix(X_hat, Y_hat, 0 , 0)
+            kernel_matrix = self._kernel_matrix(X_hat, Y_hat, 0, 0)
 
         self.kernel_matrix_ = kernel_matrix
         U = self._statistic(kernel_matrix, len(X_hat), len(Y_hat))
